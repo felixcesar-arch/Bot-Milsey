@@ -18,17 +18,8 @@ from fastapi import FastAPI, Request
 # 1. CONFIGURACIÓN
 # --------------------------------------------------------------------------
 
-TELEGRAM_BOT_TOKEN = os.getenv(
-    "TELEGRAM_BOT_TOKEN",
-    "8890905506:AAFYfTo57qZ6k7hNT6HzLJpgu5sBdYnmL3s",
-).strip()
-
-# Pega aquí abajo el enlace de tu Google Sheet entre las comillas
-GOOGLE_SHEET_URL = os.getenv(
-    "GOOGLE_SHEET_URL",
-    "https://docs.google.com/spreadsheets/d/1QmVf6bjSbEHVYAk-OMT09xC9Tk4Kr-JAm9_KOSoSxDs/edit?usp=sharing",
-).strip()
-
+TELEGRAM_BOT_TOKEN = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+GOOGLE_SHEET_URL = os.getenv("GOOGLE_SHEET_URL", "https://docs.google.com/...").strip()
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
 
 MAX_RESULTADOS = 8
