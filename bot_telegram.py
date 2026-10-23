@@ -11,8 +11,10 @@ import re
 import unicodedata
 
 import httpx
+import requests
 import pandas as pd
 from fastapi import FastAPI, Request
+
 
 # --------------------------------------------------------------------------
 # 1. CONFIGURACIÓN
@@ -341,3 +343,20 @@ if __name__ == "__main__":
 
     port = int(os.getenv("PORT", 8000))
     uvicorn.run("bot_telegram:app", host="0.0.0.0", port=port)
+
+
+@app.on_event("startup")
+def configurar_webhook():
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    render_url = os.getenv("RENDER_EXTERNAL_URL") # Render la llena solita con tu URL
+    
+    if token and render_url:
+        # Asegúrate de que '/webhook' coincida con la ruta exacta donde recibes los mensajes (ej. @app.post("/webhook"))
+        webhook_url = f"{render_url}/webhook"
+        url = f"https://api.telegram.org/bot{token}/setWebhook?url={webhook_url}"
+        
+        try:
+            respuesta = requests.get(url)
+            print("Respuesta de Telegram al configurar webhook:", respuesta.json())
+        except Exception as e:
+            print("No se pudo configurar el webhook automáticamente:", e)
