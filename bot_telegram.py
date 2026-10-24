@@ -464,7 +464,8 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         "2. Al mostrar productos, usa viñetas simples e incluye únicamente el nombre de la pieza, el material y el precio. OMITE mencionar la categoría y las existencias generales. "
         "3. CONTROL DE STOCK: Si el cliente solicita una cantidad mayor a la disponible, infórmale amablemente que el stock no es suficiente y especifica exactamente cuántas unidades quedan. "
         "4. LONGITUD: Cuando ofrezcas sugerencias o alternativas, tu mensaje debe ser directo, persuasivo y estructurado en un máximo de 3 párrafos cortos. "
-        "5. FOTOGRAFÍAS (REGLA ESTRICTA): NUNCA incluyas URLs ni etiquetas de fotos de forma proactiva o en sugerencias. ÚNICAMENTE cuando el cliente pida explícitamente ver la foto de una pieza en específico, busca la URL de ESE producto en tu inventario y colócala al final de tu respuesta con EXACTAMENTE este formato: [FOTO: URL_AQUI].\n\n"
+        "5. FOTOGRAFÍAS (REGLA ESTRICTA): NUNCA incluyas URLs ni etiquetas de fotos de forma proactiva o en sugerencias. ÚNICAMENTE cuando el cliente pida explícitamente ver la foto de una pieza en específico, busca la URL de ESE producto en tu inventario y colócala al final de tu respuesta con EXACTAMENTE este formato: [FOTO: URL_AQUI]. "
+        "6. INVENTARIO ESTRICTO Y MONEDA: NUNCA inventes productos ni precios. Si el cliente pide sugerencias sobre algo que no vendes (ej. ropa o vestidos), ofrécele de forma natural las piezas reales que aparecen en tu contexto. Todos los precios SIEMPRE son en Pesos Mexicanos (MXN).\n\n"
         f"{contexto_inventario}"
     )
 
