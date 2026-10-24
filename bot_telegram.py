@@ -272,40 +272,61 @@ async def consultar_inventario(consulta: str) -> str:
 
 
 async def enviar_mensaje(chat_id: int, texto: str) -> None:
-    # 1. Buscar si la IA incluyó la etiqueta de foto
     match_foto = re.search(r'\[FOTO:\s*(.*?)\]', texto)
     
     try:
-        async with httpx.AsyncClient(timeout=10.0) as cliente:
+        async with httpx.AsyncClient(timeout=20.0, follow_redirects=True) as cliente:
             if match_foto:
-                # 2. Extraer URL y limpiar el texto para el pie de foto
-                url_foto = match_foto.group(1)
+                url_foto = match_foto.group(1).strip()
                 texto_limpio = re.sub(r'\[FOTO:\s*(.*?)\]', '', texto).strip()
-                
-                # 3. Cambiar dinámicamente el endpoint a sendPhoto
                 url_photo_api = TELEGRAM_API_URL.replace("sendMessage", "sendPhoto")
                 
-                payload = {
-                    "chat_id": chat_id,
-                    "photo": url_foto,
-                    "caption": texto_limpio,
-                    "parse_mode": "HTML"
-                }
-                respuesta = await cliente.post(url_photo_api, json=payload)
-            else:
-                # 4. Flujo normal de texto si no hay foto
-                payload = {
-                    "chat_id": chat_id,
-                    "text": texto,
-                    "parse_mode": "HTML",
-                    "disable_web_page_preview": True,
-                }
-                respuesta = await cliente.post(TELEGRAM_API_URL, json=payload)
+                # 1. Tu servidor descarga la imagen de Drive en memoria
+                res_descarga = await cliente.get(url_foto)
                 
+                if res_descarga.status_code == 200 and len(res_descarga.content) > 0:
+                    # 2. Se envía el archivo binario directamente a Telegram
+                    archivos = {
+                        "photo": ("producto.png", res_descarga.content, "image/png")
+                    }
+                    datos = {
+                        "chat_id": chat_id,
+                        "caption": texto_limpio[:1000],  # Límite seguro de Telegram
+                        "parse_mode": "HTML"
+                    }
+                    respuesta = await cliente.post(url_photo_api, data=datos, files=archivos)
+                    
+                    if respuesta.status_code == 200:
+                        # Si el texto era más largo que el límite de caption, mandamos el resto
+                        if len(texto_limpio) > 1000:
+                            await cliente.post(TELEGRAM_API_URL, json={
+                                "chat_id": chat_id,
+                                "text": texto_limpio[1000:],
+                                "parse_mode": "HTML"
+                            })
+                        return
+
+                # Si Drive falló o dio error, se envía el texto normal con el enlace
+                mensaje_fallback = f"{texto_limpio}\n\n📷 Puedes ver la imagen aquí: {url_foto}"
+                await cliente.post(TELEGRAM_API_URL, json={
+                    "chat_id": chat_id,
+                    "text": mensaje_fallback,
+                    "parse_mode": "HTML"
+                })
+                return
+
+            # Flujo regular de texto
+            payload = {
+                "chat_id": chat_id,
+                "text": texto,
+                "parse_mode": "HTML",
+                "disable_web_page_preview": True,
+            }
+            respuesta = await cliente.post(TELEGRAM_API_URL, json=payload)
             respuesta.raise_for_status()
-            
-    except httpx.HTTPError as error:
-        print(f"[ERROR] No se pudo enviar el mensaje al chat {chat_id}: {error}")
+
+    except Exception as error:
+        print(f"[ERROR] No se pudo enviar el mensaje al chat {chat_id}: {repr(error)}")
 
 # --------------------------------------------------------------------------
 # 7. ENDPOINTS
