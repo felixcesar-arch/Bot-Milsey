@@ -424,7 +424,7 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
     )
 
     data = {
-        "model": "llama-3.3-70b-versatile",
+        "model": "openai/gpt-oss-20b",
         "messages": [
             {"role": "system", "content": prompt_sistema},
             {"role": "user", "content": mensaje_usuario}
