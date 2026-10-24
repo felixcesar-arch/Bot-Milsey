@@ -432,14 +432,14 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         "temperature": 0.7
     }
     
-    try:
+   try:
         response = requests.post(url, json=data, headers=headers)
         resultado = response.json()
         
-        # Verificamos si Groq mandó un error en el JSON
+        # AQUÍ ESTÁ EL TRUCO: Si hay error, lo imprimimos completo en rojo en la consola
         if "error" in resultado:
-            print("Error reportado por Groq API:", resultado["error"])
-            return f"¡Hola! Bienvenido/a a Milsey. Veo que buscas '{mensaje_usuario}', pero tuve un detalle con el servicio de IA. ¡Pronto te atenderemos mejor!"
+            print("❌ ERROR REAL DE GROQ API:", resultado["error"])
+            return f"Error de Groq: {resultado['error'].get('message', 'Desconocido')}"
             
         return resultado["choices"][0]["message"]["content"]
         
