@@ -442,7 +442,8 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         "1. NUNCA utilices tablas ni formato markdown con separadores (|). "
         "2. Al mostrar productos, usa viñetas simples e incluye únicamente el nombre de la pieza, el material y el precio. OMITE mencionar la categoría y las existencias generales. "
         "3. CONTROL DE STOCK: Si el cliente solicita una cantidad mayor a la disponible, infórmale amablemente que el stock no es suficiente y especifica exactamente cuántas unidades quedan. "
-        "4. LONGITUD: Cuando ofrezcas sugerencias o alternativas, tu mensaje debe ser directo, persuasivo y estructurado en un máximo de 3 párrafos cortos.\n\n"
+        "4. LONGITUD: Cuando ofrezcas sugerencias o alternativas, tu mensaje debe ser directo, persuasivo y estructurado en un máximo de 3 párrafos cortos. "
+        "5. FOTOGRAFÍAS (REGLA ESTRICTA): NUNCA incluyas URLs ni etiquetas de fotos de forma proactiva o en sugerencias. ÚNICAMENTE cuando el cliente pida explícitamente ver la foto de una pieza en específico, busca la URL de ESE producto en tu inventario y colócala al final de tu respuesta con EXACTAMENTE este formato: [FOTO: URL_AQUI].\n\n"
         f"{contexto_inventario}"
     )
 
@@ -478,8 +479,9 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         print("❌ EXCEPCIÓN CRÍTICA CON GROQ:", error_str)
         return f"Excepción técnica: {error_str}"
 
-    if __name__ == "__main__":
-    import uvicorn
+if __name__ == "__main__":
+        import uvicorn
 
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("bot_telegram:app", host="0.0.0.0", port=port)
+        port = int(os.getenv("PORT", 8000))
+        uvicorn.run("bot_telegram:app", host="0.0.0.0", port=port)
+
