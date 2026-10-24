@@ -323,6 +323,20 @@ async def recibir_actualizacion(request: Request):
     if not texto or chat_id is None:
         return {"status": "ok"}
 
+    respuesta_ia = consultar_ia_groq(texto)
+
+    token = os.getenv("TELEGRAM_BOT_TOKEN")
+    url_telegram = f"https://api.telegram.org/bot{token}/sendMessage"
+    payload = {
+        "chat_id": chat_id,
+        "text": respuesta_ia
+    }
+    requests.post(url_telegram, json=payload)
+
+    return {"status": "ok"}
+    
+
+
     texto = texto.strip()
 
     try:
@@ -360,3 +374,36 @@ def configurar_webhook():
             print("Respuesta de Telegram al configurar webhook:", respuesta.json())
         except Exception as e:
             print("No se pudo configurar el webhook automáticamente:", e)
+
+def consultar_ia_groq(mensaje_usuario):
+    groq_api_key = os.getenv("GROQ_API_KEY")
+    if not groq_api_key:
+        return "¡Hola! Gracias por escribir a Milsey. ¿En qué te puedo ayudar hoy?"
+    
+    url = "https://api.groq.com/openai/v1/chat/completions"
+    headers = {
+        "Authorization": f"Bearer {groq_api_key}",
+        "Content-Type": "application/json"
+    }
+    data = {
+        "model": "llama3-8b-8192",
+        "messages": [
+            {
+                "role": "system", 
+                "content": "Eres el asistente virtual de Milsey, una joyería. Tu trabajo es atender a los clientes de forma amable, servicial y vendedora, ayudándoles a resolver dudas sobre accesorios y compras."
+            },
+            {
+                "role": "user", 
+                "content": mensaje_usuario
+            }
+        ],
+        "temperature": 0.7
+    }
+    
+    try:
+        response = requests.post(url, json=data, headers=headers)
+        resultado = response.json()
+        return resultado["choices"][0]["message"]["content"]
+    except Exception as e:
+        print("Error al consultar Groq:", e)
+        return "¡Hola! Gracias por escribir a Milsey. ¿Qué pieza te gustaría consultar?"
