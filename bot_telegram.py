@@ -424,7 +424,7 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
     )
 
     data = {
-        "model": "llama-3.1-8b-instant",
+        "model": "llama-3.1-8b",
         "messages": [
             {"role": "system", "content": prompt_sistema},
             {"role": "user", "content": mensaje_usuario}
