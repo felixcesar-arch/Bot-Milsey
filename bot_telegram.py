@@ -437,5 +437,8 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         resultado = response.json()
         return resultado["choices"][0]["message"]["content"]
     except Exception as e:
-        print("Error al consultar Groq con inventario:", e)
+        print("Error detallado al consultar Groq:", repr(e))
+        # Si la respuesta de Groq falló por el servidor, imprimimos el contenido:
+        if 'response' in locals() and hasattr(response, 'text'):
+            print("Respuesta cruda de Groq:", response.text)
         return "¡Hola! Gracias por escribir a Milsey. ¿Qué pieza te gustaría consultar?"
