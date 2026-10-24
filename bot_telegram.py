@@ -407,7 +407,7 @@ def configurar_webhook():
 def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
     groq_api_key = os.getenv("GROQ_API_KEY")
     if not groq_api_key:
-        return "¡Hola! Gracias por escribir a Milsey. ¿En qué te puedo ayudar hoy?"
+        return "Error: Falta configurar la variable GROQ_API_KEY en Render."
     
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -432,19 +432,25 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         "temperature": 0.7
     }
     
-   try:
-        response = requests.post(url, json=data, headers=headers)
+    try:
+        # Añadimos un timeout de 8 segundos para que no se quede colgado
+        response = requests.post(url, json=data, headers=headers, timeout=8.0)
+        
+        # Si la API regresa un código de error (ej. 401 Unauthorized, 429 Rate Limit, etc.)
+        if response.status_code != 200:
+            print(f"⚠️ Groq respondió con código {response.status_code}: {response.text}")
+            return f"Error HTTP {response.status_code} de Groq: {response.text[:100]}"
+            
         resultado = response.json()
         
-        # AQUÍ ESTÁ EL TRUCO: Si hay error, lo imprimimos completo en rojo en la consola
         if "error" in resultado:
-            print("❌ ERROR REAL DE GROQ API:", resultado["error"])
-            return f"Error de Groq: {resultado['error'].get('message', 'Desconocido')}"
+            print("❌ Error en JSON de Groq:", resultado["error"])
+            return f"Error Groq: {resultado['error'].get('message', 'Desconocido')}"
             
         return resultado["choices"][0]["message"]["content"]
         
     except Exception as e:
-        print("Error detallado al consultar Groq con inventario:", repr(e))
-        if 'response' in locals() and hasattr(response, 'text'):
-            print("Respuesta cruda de Groq:", response.text)
-        return "¡Hola! Gracias por escribir a Milsey. ¿Qué pieza te gustaría consultar?"
+        # ESTO MANDARÁ EL ERROR EXACTO AL CHAT DE TELEGRAM PARA VERLO DE INMEDIATO
+        error_str = repr(e)
+        print("❌ EXCEPCIÓN CRÍTICA CON GROQ:", error_str)
+        return f"Excepción técnica: {error_str}"
