@@ -323,16 +323,45 @@ async def recibir_actualizacion(request: Request):
     if not texto or chat_id is None:
         return {"status": "ok"}
 
-    respuesta_ia = consultar_ia_groq(texto)
+    texto = texto.strip()
 
-    token = os.getenv("TELEGRAM_BOT_TOKEN")
-    url_telegram = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": respuesta_ia
-    }
-    requests.post(url_telegram, json=payload)
+    try:
+        # Si mandan comandos de inicio o ayuda, mandamos el mensaje de bienvenida fijo
+        if texto.lower().startswith(("/start", "/help", "/ayuda")):
+            await enviar_mensaje(chat_id, MENSAJE_BIENVENIDA)
+            return {"status": "ok"}
 
+        # 1. Buscamos las piezas relevantes en Google Sheets basándonos en lo que escribió el cliente
+        df_inventario = await cargar_inventario()
+        resultados, _ = buscar_piezas(df_inventario, texto)
+
+        # 2. Preparamos un resumen del inventario encontrado para dárselo como contexto a la IA
+        contexto_inventario = "No se encontraron piezas exactas en el inventario para esta consulta."
+        if not resultados.empty:
+            piezas_encontradas = []
+            for _, fila in resultados.head(5).iterrows():
+                p_nombre = texto_celda(fila.get("producto"))
+                p_cat = texto_celda(fila.get("categoria"))
+                p_mat = texto_celda(fila.get("material"))
+                p_precio = limpiar_numero(fila.get("precio"))
+                p_stock = limpiar_numero(fila.get("stock"))
+                
+                precio_txt = f"${p_precio:,.2f} MXN" if not pd.isna(p_precio) else "Precio por consultar"
+                stock_txt = f"Disponible ({int(p_stock)} piezas)" if not pd.isna(p_stock) and p_stock > 0 else "Agotado"
+                
+                piezas_encontradas.append(f"- {p_nombre} | Categoría: {p_cat} | Material: {p_mat} | Precio: {precio_txt} | Estado: {stock_txt}")
+            
+            contexto_inventario = "Piezas disponibles en el catálogo de Milsey que coinciden con la búsqueda:\n" + "\n".join(piezas_encontradas)
+
+        # 3. Consultamos a la IA de Groq pasándole tanto el mensaje del cliente como el inventario real
+        respuesta_ia = consultar_ia_groq_con_inventario(texto, contexto_inventario)
+
+    except Exception as error:
+        print(f"[ERROR] Fallo procesando la consulta '{texto}': {error}")
+        respuesta_ia = "¡Hola! Disculpa, tuve un pequeño detalle técnico consultando el catálogo. ¿En qué te puedo ayudar?"
+
+    # 4. Enviamos la respuesta redactada por la IA al chat de Telegram
+    await enviar_mensaje(chat_id, respuesta_ia)
     return {"status": "ok"}
     
 
@@ -375,7 +404,7 @@ def configurar_webhook():
         except Exception as e:
             print("No se pudo configurar el webhook automáticamente:", e)
 
-def consultar_ia_groq(mensaje_usuario):
+def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
     groq_api_key = os.getenv("GROQ_API_KEY")
     if not groq_api_key:
         return "¡Hola! Gracias por escribir a Milsey. ¿En qué te puedo ayudar hoy?"
@@ -385,17 +414,20 @@ def consultar_ia_groq(mensaje_usuario):
         "Authorization": f"Bearer {groq_api_key}",
         "Content-Type": "application/json"
     }
+    
+    prompt_sistema = (
+        "Eres el asistente virtual experto y amable de Milsey, una joyería especializada en acero inoxidable y chapa en oro. "
+        "Tu objetivo es atender a los clientes de forma cálida, servicial y vendedora. "
+        "Utiliza la siguiente información del inventario real de la tienda para responder al cliente de manera natural, "
+        "mencionando los nombres de las piezas, sus precios y materiales cuando sea relevante:\n\n"
+        f"{contexto_inventario}"
+    )
+
     data = {
         "model": "llama3-8b-8192",
         "messages": [
-            {
-                "role": "system", 
-                "content": "Eres el asistente virtual de Milsey, una joyería. Tu trabajo es atender a los clientes de forma amable, servicial y vendedora, ayudándoles a resolver dudas sobre accesorios y compras."
-            },
-            {
-                "role": "user", 
-                "content": mensaje_usuario
-            }
+            {"role": "system", "content": prompt_sistema},
+            {"role": "user", "content": mensaje_usuario}
         ],
         "temperature": 0.7
     }
@@ -405,5 +437,5 @@ def consultar_ia_groq(mensaje_usuario):
         resultado = response.json()
         return resultado["choices"][0]["message"]["content"]
     except Exception as e:
-        print("Error al consultar Groq:", e)
+        print("Error al consultar Groq con inventario:", e)
         return "¡Hola! Gracias por escribir a Milsey. ¿Qué pieza te gustaría consultar?"
