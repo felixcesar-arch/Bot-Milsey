@@ -160,13 +160,16 @@ async def cargar_inventario() -> pd.DataFrame:
         "existencias": "stock",
         "existencia": "stock",
         "id_producto": "id",
+        "url_foto": "foto",
+        "imagen": "foto",
+        "link_foto": "foto",
     }
     df = df.rename(columns=renombres)
 
     if "producto" not in df.columns:
         raise ValueError(f"No se halló la columna de producto. Columnas leídas: {list(df.columns)}")
 
-    for columna in ("categoria", "material", "precio", "stock"):
+    for columna in ("categoria", "material", "precio", "stock", "foto"):
         if columna not in df.columns:
             df[columna] = pd.NA
 
@@ -366,11 +369,13 @@ async def recibir_actualizacion(request: Request):
                 p_mat = texto_celda(fila.get("material"))
                 p_precio = limpiar_numero(fila.get("precio"))
                 p_stock = limpiar_numero(fila.get("stock"))
+                p_foto = texto_celda(fila.get("foto"))
                 
                 precio_txt = f"${p_precio:,.2f} MXN" if not pd.isna(p_precio) else "Precio por consultar"
                 stock_txt = f"Disponible ({int(p_stock)} piezas)" if not pd.isna(p_stock) and p_stock > 0 else "Agotado"
+                foto_txt = f" | Foto: {p_foto}" if p_foto else ""
                 
-                piezas_encontradas.append(f"- {p_nombre} | Categoría: {p_cat} | Material: {p_mat} | Precio: {precio_txt} | Estado: {stock_txt}")
+                piezas_encontradas.append(f"- {p_nombre} | Categoría: {p_cat} | Material: {p_mat} | Precio: {precio_txt} | Estado: {stock_txt}{foto_txt}")
             
             contexto_inventario = "Piezas disponibles en el catálogo de Milsey que coinciden con la búsqueda:\n" + "\n".join(piezas_encontradas)
 
@@ -401,12 +406,6 @@ async def recibir_actualizacion(request: Request):
     await enviar_mensaje(chat_id, respuesta)
     return {"status": "ok"}
 
-
-if __name__ == "__main__":
-    import uvicorn
-
-    port = int(os.getenv("PORT", 8000))
-    uvicorn.run("bot_telegram:app", host="0.0.0.0", port=port)
 
 
 @app.on_event("startup")
@@ -478,3 +477,9 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         error_str = repr(e)
         print("❌ EXCEPCIÓN CRÍTICA CON GROQ:", error_str)
         return f"Excepción técnica: {error_str}"
+
+    if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", 8000))
+    uvicorn.run("bot_telegram:app", host="0.0.0.0", port=port)
