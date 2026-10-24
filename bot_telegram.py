@@ -269,19 +269,40 @@ async def consultar_inventario(consulta: str) -> str:
 
 
 async def enviar_mensaje(chat_id: int, texto: str) -> None:
-    payload = {
-        "chat_id": chat_id,
-        "text": texto,
-        "parse_mode": "HTML",
-        "disable_web_page_preview": True,
-    }
+    # 1. Buscar si la IA incluyó la etiqueta de foto
+    match_foto = re.search(r'\[FOTO:\s*(.*?)\]', texto)
+    
     try:
         async with httpx.AsyncClient(timeout=10.0) as cliente:
-            respuesta = await cliente.post(TELEGRAM_API_URL, json=payload)
+            if match_foto:
+                # 2. Extraer URL y limpiar el texto para el pie de foto
+                url_foto = match_foto.group(1)
+                texto_limpio = re.sub(r'\[FOTO:\s*(.*?)\]', '', texto).strip()
+                
+                # 3. Cambiar dinámicamente el endpoint a sendPhoto
+                url_photo_api = TELEGRAM_API_URL.replace("sendMessage", "sendPhoto")
+                
+                payload = {
+                    "chat_id": chat_id,
+                    "photo": url_foto,
+                    "caption": texto_limpio,
+                    "parse_mode": "HTML"
+                }
+                respuesta = await cliente.post(url_photo_api, json=payload)
+            else:
+                # 4. Flujo normal de texto si no hay foto
+                payload = {
+                    "chat_id": chat_id,
+                    "text": texto,
+                    "parse_mode": "HTML",
+                    "disable_web_page_preview": True,
+                }
+                respuesta = await cliente.post(TELEGRAM_API_URL, json=payload)
+                
             respuesta.raise_for_status()
+            
     except httpx.HTTPError as error:
         print(f"[ERROR] No se pudo enviar el mensaje al chat {chat_id}: {error}")
-
 
 # --------------------------------------------------------------------------
 # 7. ENDPOINTS
