@@ -37,6 +37,9 @@ PALABRAS_VACIAS = {
 
 app = FastAPI(title="Milsey - Bot de Telegram")
 
+# --- MEMORIA TEMPORAL DEL BOT ---
+sesiones = {}
+
 # --------------------------------------------------------------------------
 # 2. MENSAJES FIJOS
 # --------------------------------------------------------------------------
@@ -363,13 +366,25 @@ async def recibir_actualizacion(request: Request):
     if not isinstance(mensaje, dict):
         return {"status": "ok"}
 
-    texto = mensaje.get("text")
-    chat_id = mensaje.get("chat", {}).get("id")
-    if not texto or chat_id is None:
+chat_id = mensaje.get("chat", {}).get("id")
+    if chat_id is None:
         return {"status": "ok"}
 
-    texto = texto.strip()
+    # Detectar si el cliente envió una foto (posible comprobante)
+    if "photo" in mensaje:
+        mensaje_recibo = (
+            "✅ <b>¡Imagen recibida!</b>\n\n"
+            "Si este es tu comprobante de pago, nuestro equipo está validando el depósito en la cuenta. "
+            "En breve nos comunicaremos contigo por este medio para coordinar la entrega de tu pieza. 💛"
+        )
+        await enviar_mensaje(chat_id, mensaje_recibo)
+        return {"status": "ok"}
 
+    texto = mensaje.get("text")
+    if not texto:
+        return {"status": "ok"}
+        
+    texto = texto.strip()
     try:
         # Si mandan comandos de inicio o ayuda, mandamos el mensaje de bienvenida fijo
         if texto.lower().startswith(("/start", "/help", "/ayuda")):
@@ -465,7 +480,9 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         "3. CONTROL DE STOCK: Si el cliente solicita una cantidad mayor a la disponible, infórmale amablemente que el stock no es suficiente y especifica exactamente cuántas unidades quedan. "
         "4. LONGITUD: Cuando ofrezcas sugerencias o alternativas, tu mensaje debe ser directo, persuasivo y estructurado en un máximo de 3 párrafos cortos. "
         "5. FOTOGRAFÍAS (REGLA ESTRICTA): NUNCA incluyas URLs ni etiquetas de fotos de forma proactiva o en sugerencias. ÚNICAMENTE cuando el cliente pida explícitamente ver la foto de una pieza en específico, busca la URL de ESE producto en tu inventario y colócala al final de tu respuesta con EXACTAMENTE este formato: [FOTO: URL_AQUI]. "
-        "6. INVENTARIO ESTRICTO Y MONEDA: NUNCA inventes productos ni precios. Si el cliente pide sugerencias sobre algo que no vendes (ej. ropa o vestidos), ofrécele de forma natural las piezas reales que aparecen en tu contexto. Todos los precios SIEMPRE son en Pesos Mexicanos (MXN).\n\n"
+        "6. INVENTARIO ESTRICTO Y MONEDA: NUNCA inventes productos ni precios. Si el cliente pide sugerencias sobre algo que no vendes (ej. ropa o vestidos), ofrécele de forma natural las piezas reales que aparecen en tu contexto. Todos los precios SIEMPRE son en Pesos Mexicanos (MXN). "
+        "7. PROCESO DE PAGO: Cuando el cliente exprese claramente que desea comprar una pieza, proporciónale los datos de pago (Ej. Transferencia BBVA, CLABE: 012XXXXXXXXXXXXXXX, a nombre de Milsey). Indícale que envíe la foto de su comprobante por este mismo chat y advierte amablemente que el envío se procesará una vez que el pago se refleje en la cuenta. \n\n"
+        
         f"{contexto_inventario}"
     )
 
