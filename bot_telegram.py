@@ -391,12 +391,11 @@ chat_id = mensaje.get("chat", {}).get("id")
             await enviar_mensaje(chat_id, MENSAJE_BIENVENIDA)
             return {"status": "ok"}
 
-        # 1. Buscamos las piezas relevantes en Google Sheets basándonos en lo que escribió el cliente
+# 1. Buscamos las piezas relevantes en Google Sheets
         df_inventario = await cargar_inventario()
         resultados, _ = buscar_piezas(df_inventario, texto)
 
-        # 2. Preparamos un resumen del inventario encontrado para dárselo como contexto a la IA
-        contexto_inventario = "No se encontraron piezas exactas en el inventario para esta consulta."
+        # 2. Lógica de contexto con MEMORIA
         if not resultados.empty:
             piezas_encontradas = []
             for _, fila in resultados.head(5).iterrows():
@@ -405,7 +404,7 @@ chat_id = mensaje.get("chat", {}).get("id")
                 p_mat = texto_celda(fila.get("material"))
                 p_precio = limpiar_numero(fila.get("precio"))
                 p_stock = limpiar_numero(fila.get("stock"))
-                p_foto = texto_celda(fila.get("foto"))
+                p_foto = texto_celda(fila.get("foto")) 
                 
                 precio_txt = f"${p_precio:,.2f} MXN" if not pd.isna(p_precio) else "Precio por consultar"
                 stock_txt = f"Disponible ({int(p_stock)} piezas)" if not pd.isna(p_stock) and p_stock > 0 else "Agotado"
@@ -413,10 +412,23 @@ chat_id = mensaje.get("chat", {}).get("id")
                 
                 piezas_encontradas.append(f"- {p_nombre} | Categoría: {p_cat} | Material: {p_mat} | Precio: {precio_txt} | Estado: {stock_txt}{foto_txt}")
             
-            contexto_inventario = "Piezas disponibles en el catálogo de Milsey que coinciden con la búsqueda:\n" + "\n".join(piezas_encontradas)
+            contexto_inventario = "PRODUCTOS ENCONTRADOS:\n" + "\n".join(piezas_encontradas)
+            
+            # Guardamos este catálogo en la memoria del cliente
+            sesiones[chat_id] = contexto_inventario
+            texto_usuario_ia = texto
+            
+        else:
+            # Si el cliente solo dice "mandame foto", usamos su memoria anterior
+            if chat_id in sesiones:
+                contexto_inventario = sesiones[chat_id]
+                texto_usuario_ia = f"(El cliente sigue hablando de las piezas anteriores) Cliente dice: {texto}"
+            else:
+                contexto_inventario = "PRODUCTOS ENCONTRADOS: [VACÍO. REGLA CRÍTICA: NO inventes ni ofrezcas ningún producto específico. Limítate a decir amablemente que no manejas ese artículo y ofrece ayuda general.]"
+                texto_usuario_ia = texto
 
-        # 3. Consultamos a la IA de Groq pasándole tanto el mensaje del cliente como el inventario real
-        respuesta_ia = consultar_ia_groq_con_inventario(texto, contexto_inventario)
+        # 3. Consultamos a la IA de Groq pasándole la memoria
+        respuesta_ia = consultar_ia_groq_con_inventario(texto_usuario_ia, contexto_inventario)
 
     except Exception as error:
         print(f"[ERROR] Fallo procesando la consulta '{texto}': {error}")
@@ -479,7 +491,7 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         "2. Al mostrar productos, usa viñetas simples e incluye únicamente el nombre de la pieza, el material y el precio. OMITE mencionar la categoría y las existencias generales. "
         "3. CONTROL DE STOCK: Si el cliente solicita una cantidad mayor a la disponible, infórmale amablemente que el stock no es suficiente y especifica exactamente cuántas unidades quedan. "
         "4. LONGITUD: Cuando ofrezcas sugerencias o alternativas, tu mensaje debe ser directo, persuasivo y estructurado en un máximo de 3 párrafos cortos. "
-        "5. FOTOGRAFÍAS (REGLA ESTRICTA): NUNCA incluyas URLs ni etiquetas de fotos de forma proactiva o en sugerencias. ÚNICAMENTE cuando el cliente pida explícitamente ver la foto de una pieza en específico, busca la URL de ESE producto en tu inventario y colócala al final de tu respuesta con EXACTAMENTE este formato: [FOTO: URL_AQUI]. "
+        "5. FOTOGRAFÍAS: Si el cliente pide una foto (ej. '¿me envías foto?', 'quiero verla'), asume automáticamente que se refiere a la pieza de la que acaban de hablar. Busca la URL de ese producto en tu inventario y colócala al final de tu respuesta con EXACTAMENTE este formato: [FOTO: URL_AQUI]. "
         "6. INVENTARIO ESTRICTO Y MONEDA: NUNCA inventes productos ni precios. Si el cliente pide sugerencias sobre algo que no vendes (ej. ropa o vestidos), ofrécele de forma natural las piezas reales que aparecen en tu contexto. Todos los precios SIEMPRE son en Pesos Mexicanos (MXN). "
         "7. PROCESO DE PAGO: Cuando el cliente exprese claramente que desea comprar una pieza, proporciónale los datos de pago (Ej. Transferencia BBVA, CLABE: 012XXXXXXXXXXXXXXX, a nombre de Milsey). Indícale que envíe la foto de su comprobante por este mismo chat y advierte amablemente que el envío se procesará una vez que el pago se refleje en la cuenta. \n\n"
         
