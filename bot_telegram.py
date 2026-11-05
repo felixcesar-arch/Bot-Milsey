@@ -366,9 +366,18 @@ async def recibir_actualizacion(request: Request):
     if not isinstance(mensaje, dict):
         return {"status": "ok"}
 
-chat_id = mensaje.get("chat", {}).get("id")
+    chat_id = mensaje.get("chat", {}).get("id")
     if chat_id is None:
         return {"status": "ok"}
+
+    # --- AQUÍ EMPIEZA EL PASO 1 ---
+    # Inicializar la memoria del usuario si es su primer mensaje
+    if chat_id not in sesiones:
+        sesiones[chat_id] = {"contexto": "", "carrito": []}
+
+    # 1. Buscamos las piezas relevantes en Google Sheets
+    df_inventario = await cargar_inventario()
+    # ... (sigue con el resto del código)
 
     # Detectar si el cliente envió una foto (posible comprobante)
     if "photo" in mensaje:
