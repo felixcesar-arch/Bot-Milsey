@@ -425,7 +425,11 @@ async def recibir_actualizacion(request: Request):
                 contexto_inventario = sesiones[chat_id]["contexto"]
                 texto_usuario_ia = f"(El cliente sigue hablando de las piezas anteriores) Cliente dice: {texto}"
             else:
-                contexto_inventario = "PRODUCTOS ENCONTRADOS: [VACÍO. REGLA CRÍTICA: NO inventes ni ofrezcas ningún producto específico. Limítate a decir amablemente que no manejas ese artículo y ofrece ayuda general.]"
+                contexto_inventario = (
+                    "PRODUCTOS ENCONTRADOS: [Búsqueda general]. "
+                    "NOTA PARA LA IA: El cliente está saludando o haciendo una pregunta abierta. "
+                    "Responde con mucha alegría, dulzura y calidez. Dale la bienvenida a Milsey, confírmale que SÍ tenemos hermosas joyas disponibles y pregúntale amablemente qué tipo de pieza le gustaría ver (anillos, collares, pulseras, etc.)."
+                )
                 texto_usuario_ia = texto
 
         # --- 5. CONSULTA A GROQ ---
@@ -504,7 +508,8 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
     prompt_sistema = (
         "Eres el asistente virtual experto y amable de Milsey, una joyería especializada en acero inoxidable y chapa en oro. "
         "Tu objetivo es atender a los clientes de forma cálida, servicial y vendedora, utilizando la información del inventario real. "
-        "REGLAS ESTRICTAS DE FORMATO Y REDACCIÓN: "
+        "TU PERSONALIDAD: Eres extremadamente dulce, entusiasta y paciente. Tu tono SIEMPRE debe ser conversacional y muy humano, usando emojis lindos (✨, 💛, 💎, 💍). NUNCA suenes como un robot ni te pongas a la defensiva. "
+        "REGLAS OPERATIVAS (Aplica estas reglas sin perder tu calidez): "
         "1. NUNCA utilices tablas ni formato markdown con separadores (|). "
         "2. Al mostrar productos, usa viñetas simples e incluye únicamente el nombre de la pieza, el material y el precio. OMITE mencionar la categoría y las existencias generales. "
         "3. CONTROL DE STOCK: Si el cliente solicita una cantidad mayor a la disponible, infórmale amablemente que el stock no es suficiente y especifica exactamente cuántas unidades quedan. "
