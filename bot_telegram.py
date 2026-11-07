@@ -370,16 +370,11 @@ async def recibir_actualizacion(request: Request):
     if chat_id is None:
         return {"status": "ok"}
 
-    # --- AQUÍ EMPIEZA EL PASO 1 ---
-    # Inicializar la memoria del usuario si es su primer mensaje
+    # --- 1. INICIALIZAR MEMORIA Y CARRITO ---
     if chat_id not in sesiones:
         sesiones[chat_id] = {"contexto": "", "carrito": []}
 
-    # 1. Buscamos las piezas relevantes en Google Sheets
-    df_inventario = await cargar_inventario()
-    # ... (sigue con el resto del código)
-
-    # Detectar si el cliente envió una foto (posible comprobante)
+    # --- 2. DETECCIÓN DE COMPROBANTE DE PAGO (FOTO) ---
     if "photo" in mensaje:
         mensaje_recibo = (
             "✅ <b>¡Imagen recibida!</b>\n\n"
@@ -394,17 +389,17 @@ async def recibir_actualizacion(request: Request):
         return {"status": "ok"}
         
     texto = texto.strip()
+
+    # --- 3. COMANDOS BÁSICOS ---
     try:
-        # Si mandan comandos de inicio o ayuda, mandamos el mensaje de bienvenida fijo
         if texto.lower().startswith(("/start", "/help", "/ayuda")):
             await enviar_mensaje(chat_id, MENSAJE_BIENVENIDA)
             return {"status": "ok"}
 
-# 1. Buscamos las piezas relevantes en Google Sheets
+# --- 4. BÚSQUEDA EN INVENTARIO Y MEMORIA ---
         df_inventario = await cargar_inventario()
         resultados, _ = buscar_piezas(df_inventario, texto)
 
-        # 2. Lógica de contexto con MEMORIA
         if not resultados.empty:
             piezas_encontradas = []
             for _, fila in resultados.head(5).iterrows():
@@ -422,45 +417,59 @@ async def recibir_actualizacion(request: Request):
                 piezas_encontradas.append(f"- {p_nombre} | Categoría: {p_cat} | Material: {p_mat} | Precio: {precio_txt} | Estado: {stock_txt}{foto_txt}")
             
             contexto_inventario = "PRODUCTOS ENCONTRADOS:\n" + "\n".join(piezas_encontradas)
-            
-            # Guardamos este catálogo en la memoria del cliente
-            sesiones[chat_id] = contexto_inventario
+            sesiones[chat_id]["contexto"] = contexto_inventario
             texto_usuario_ia = texto
             
         else:
-            # Si el cliente solo dice "mandame foto", usamos su memoria anterior
-            if chat_id in sesiones:
-                contexto_inventario = sesiones[chat_id]
+            if sesiones[chat_id]["contexto"] != "":
+                contexto_inventario = sesiones[chat_id]["contexto"]
                 texto_usuario_ia = f"(El cliente sigue hablando de las piezas anteriores) Cliente dice: {texto}"
             else:
                 contexto_inventario = "PRODUCTOS ENCONTRADOS: [VACÍO. REGLA CRÍTICA: NO inventes ni ofrezcas ningún producto específico. Limítate a decir amablemente que no manejas ese artículo y ofrece ayuda general.]"
                 texto_usuario_ia = texto
 
-        # 3. Consultamos a la IA de Groq pasándole la memoria
+        # --- 5. CONSULTA A GROQ ---
         respuesta_ia = consultar_ia_groq_con_inventario(texto_usuario_ia, contexto_inventario)
 
     except Exception as error:
         print(f"[ERROR] Fallo procesando la consulta '{texto}': {error}")
         respuesta_ia = "¡Hola! Disculpa, tuve un pequeño detalle técnico consultando el catálogo. ¿En qué te puedo ayudar?"
 
-    # 4. Enviamos la respuesta redactada por la IA al chat de Telegram
-    await enviar_mensaje(chat_id, respuesta_ia)
-    return {"status": "ok"}
+    # --- 6. PROCESAMIENTO DEL CARRITO DE COMPRAS ---
+    import re 
+
+    carrito = sesiones[chat_id]["carrito"]
     
+    match_add = re.findall(r'\[ADD:\s*(.*?)\s*\|\s*([\d\.]+)\]', respuesta_ia)
+    for nombre, precio in match_add:
+        carrito.append({"nombre": nombre.strip(), "precio": float(precio)})
+    
+    match_remove = re.findall(r'\[REMOVE:\s*(.*?)\]', respuesta_ia)
+    for nombre in match_remove:
+        nombre_buscar = nombre.strip().lower()
+        for i, item in enumerate(carrito):
+            if nombre_buscar in item["nombre"].lower():
+                carrito.pop(i)
+                break
 
-
-    texto = texto.strip()
-
-    try:
-        if texto.lower().startswith(("/start", "/help", "/ayuda")):
-            respuesta = MENSAJE_BIENVENIDA
+    respuesta_limpia = re.sub(r'\[ADD:.*?\]', '', respuesta_ia)
+    respuesta_limpia = re.sub(r'\[REMOVE:.*?\]', '', respuesta_limpia)
+    
+    if "[CHECKOUT]" in respuesta_limpia or match_add or match_remove:
+        respuesta_limpia = respuesta_limpia.replace("[CHECKOUT]", "").strip()
+        
+        if carrito:
+            total = sum(item["precio"] for item in carrito)
+            ticket = "\n\n🛒 <b>TU CARRITO ACTUAL:</b>\n"
+            for item in carrito:
+                ticket += f"• {item['nombre']} - ${item['precio']:,.2f} MXN\n"
+            ticket += f"\n💰 <b>Total a pagar: ${total:,.2f} MXN</b>"
+            respuesta_limpia += ticket
         else:
-            respuesta = await consultar_inventario(texto)
-    except Exception as error:
-        print(f"[ERROR] Fallo procesando la consulta '{texto}': {error}")
-        respuesta = MENSAJE_ERROR_ARCHIVO
+            respuesta_limpia += "\n\n🛒 <i>Tu carrito está vacío en este momento.</i>"
 
-    await enviar_mensaje(chat_id, respuesta)
+    # --- 7. ENVIAR RESPUESTA AL CLIENTE ---
+    await enviar_mensaje(chat_id, respuesta_limpia)
     return {"status": "ok"}
 
 
@@ -502,7 +511,10 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         "4. LONGITUD: Cuando ofrezcas sugerencias o alternativas, tu mensaje debe ser directo, persuasivo y estructurado en un máximo de 3 párrafos cortos. "
         "5. FOTOGRAFÍAS: Si el cliente pide una foto (ej. '¿me envías foto?', 'quiero verla'), asume automáticamente que se refiere a la pieza de la que acaban de hablar. Busca la URL de ese producto en tu inventario y colócala al final de tu respuesta con EXACTAMENTE este formato: [FOTO: URL_AQUI]. "
         "6. INVENTARIO ESTRICTO Y MONEDA: NUNCA inventes productos ni precios. Si el cliente pide sugerencias sobre algo que no vendes (ej. ropa o vestidos), ofrécele de forma natural las piezas reales que aparecen en tu contexto. Todos los precios SIEMPRE son en Pesos Mexicanos (MXN). "
-        "7. PROCESO DE PAGO: Cuando el cliente exprese claramente que desea comprar una pieza, proporciónale los datos de pago (Ej. Transferencia BBVA, CLABE: 012XXXXXXXXXXXXXXX, a nombre de Milsey). Indícale que envíe la foto de su comprobante por este mismo chat y advierte amablemente que el envío se procesará una vez que el pago se refleje en la cuenta. \n\n"
+        "7. PROCESO DE PAGO: Cuando el cliente exprese claramente que desea comprar una pieza, proporciónale los datos de pago (Ej. Transferencia BBVA, CLABE: 012XXXXXXXXXXXXXXX, a nombre de Milsey). Indícale que envíe la foto de su comprobante por este mismo chat y advierte amablemente que el envío se procesará una vez que el pago se refleje en la cuenta. "
+        "8. AGREGAR AL CARRITO: Si el cliente confirma que quiere llevar una pieza o pide agregarla, añade al final de tu respuesta esta etiqueta exacta: [ADD: Nombre exacto de la pieza | Precio en números]. Ejemplo: [ADD: Anillo Silueta | 900]. "
+        "9. ELIMINAR DEL CARRITO: Si el cliente pide quitar una pieza, eliminarla o cambiarla, añade: [REMOVE: Nombre exacto de la pieza]. Ejemplo: [REMOVE: Anillo Silueta]. "
+        "10. VER CARRITO: Si el cliente pregunta cuánto es en total, qué lleva hasta ahora, o pide pagar, añade la etiqueta: [CHECKOUT]. \n\n"
         
         f"{contexto_inventario}"
     )
@@ -513,7 +525,7 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
             {"role": "system", "content": prompt_sistema},
             {"role": "user", "content": mensaje_usuario}
         ],
-        "temperature": 0.7
+        "temperature": 0.1
     }
     
     try:
