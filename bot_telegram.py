@@ -9,6 +9,7 @@ import io
 import os
 import re
 import unicodedata
+import gspread
 
 import httpx
 import requests
@@ -134,6 +135,43 @@ def obtener_url_csv(url_sheet: str) -> str:
 # --------------------------------------------------------------------------
 # 4. LECTURA DE GOOGLE SHEETS
 # --------------------------------------------------------------------------
+
+async def descontar_stock_en_sheets(carrito):
+    try:
+        print("Iniciando descuento de inventario en Google Sheets...")
+        # 1. Conectarnos usando tu llave secreta
+        gc = gspread.service_account(filename='credenciales.json')
+        
+        # 2. Abrimos tu documento usando la variable de tu URL que ya tienes arriba
+        hoja = gc.open_by_url(GOOGLE_SHEET_URL).sheet1
+        
+        # 3. Leemos todos los datos y los encabezados
+        registros = hoja.get_all_records()
+        encabezados = hoja.row_values(1)
+        
+        # OJO AQUÍ: Ubicamos qué columna es la del stock 
+        columna_stock_idx = encabezados.index("Existencias") + 1  
+        
+        # 4. Agrupamos las compras (por si compró 3 piezas iguales del mismo producto)
+        conteo_compras = {}
+        for item in carrito:
+            conteo_compras[item] = conteo_compras.get(item, 0) + 1
+            
+        # 5. Buscamos el producto en la tabla y actualizamos la celda exacta
+        for i, fila in enumerate(registros):
+            nombre_producto = str(fila.get("Nombre_Articulo", "")) 
+            stock_actual = fila.get("Existencias", 0)
+            
+            if nombre_producto in conteo_compras:
+                cantidad_comprada = conteo_compras[nombre_producto]
+                nuevo_stock = max(0, int(stock_actual) - cantidad_comprada)
+                
+                # Actualizamos la celda
+                hoja.update_cell(i + 2, columna_stock_idx, nuevo_stock)
+                print(f"✅ Se descontaron {cantidad_comprada} piezas de '{nombre_producto}'. Nuevo stock: {nuevo_stock}")
+                
+    except Exception as e:
+        print(f"❌ Error al actualizar Google Sheets: {e}")
 
 
 async def cargar_inventario() -> pd.DataFrame:
@@ -469,6 +507,21 @@ async def recibir_actualizacion(request: Request):
     
     if "[CHECKOUT]" in respuesta_limpia or match_add or match_remove:
         respuesta_limpia = respuesta_limpia.replace("[CHECKOUT]", "").strip()
+
+        # --- GATILLO DE PAGO CONFIRMADO Y DESCUENTO DE INVENTARIO ---
+    if "[PAGO_CONFIRMADO]" in respuesta_limpia:
+        respuesta_limpia = respuesta_limpia.replace("[PAGO_CONFIRMADO]", "").strip()
+        
+        carrito = sesiones[chat_id].get("carrito", [])
+        if carrito:
+            # 1. Descontamos en Google Sheets
+            await descontar_stock_en_sheets(carrito)
+            
+            # 2. Le avisamos al cliente en el chat
+            respuesta_limpia += "\n\n✅ <b>¡Pago confirmado!</b> Hemos separado tus piezas del inventario. Tu pedido está en proceso de envío. ✨"
+            
+            # 3. Vaciamos el carrito
+            sesiones[chat_id]["carrito"] = []
         
         if carrito:
             total = sum(item["precio"] for item in carrito)
@@ -531,7 +584,8 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario, histo
         "7. PROCESO DE PAGO: Cuando el cliente exprese claramente que desea comprar una pieza, proporciónale los datos de pago (Ej. Transferencia BBVA, CLABE: 012XXXXXXXXXXXXXXX, a nombre de Milsey). Indícale que envíe la foto de su comprobante por este mismo chat y advierte amablemente que el envío se procesará una vez que el pago se refleje en la cuenta. "
         "8. AGREGAR AL CARRITO: Si el cliente confirma que quiere llevar una pieza o pide agregarla, añade al final de tu respuesta esta etiqueta exacta: [ADD: Nombre exacto de la pieza | Precio en números]. Ejemplo: [ADD: Anillo Silueta | 900]. "
         "9. ELIMINAR DEL CARRITO: Si el cliente pide quitar una pieza, eliminarla o cambiarla, añade: [REMOVE: Nombre exacto de la pieza]. Ejemplo: [REMOVE: Anillo Silueta]. "
-        "10. VER CARRITO: Si el cliente pregunta cuánto es en total, qué lleva hasta ahora, o pide pagar, añade la etiqueta: [CHECKOUT]. \n\n"
+        "10. VER CARRITO: Si el cliente pregunta cuánto es en total, qué lleva hasta ahora, o pide pagar, añade la etiqueta: [CHECKOUT]. "
+        "11. CONFIRMAR PAGO: Cuando el cliente envíe su comprobante de pago o te confirme explícitamente que ya realizó la transferencia, agradécele con mucho entusiasmo y añade al final de tu respuesta EXACTAMENTE esta etiqueta: [PAGO_CONFIRMADO]. \n\n"
         
         f"{contexto_inventario}"
     )
