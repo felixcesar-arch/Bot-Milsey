@@ -372,7 +372,7 @@ async def recibir_actualizacion(request: Request):
 
     # --- 1. INICIALIZAR MEMORIA Y CARRITO ---
     if chat_id not in sesiones:
-        sesiones[chat_id] = {"contexto": "", "carrito": []}
+        sesiones[chat_id] = {"contexto": "", "carrito": [], "historial": []}
 
     # --- 2. DETECCIÓN DE COMPROBANTE DE PAGO (FOTO) ---
     if "photo" in mensaje:
@@ -432,8 +432,16 @@ async def recibir_actualizacion(request: Request):
                 )
                 texto_usuario_ia = texto
 
-        # --- 5. CONSULTA A GROQ ---
-        respuesta_ia = consultar_ia_groq_con_inventario(texto_usuario_ia, contexto_inventario)
+        # --- 5. CONSULTA A GROQ Y GUARDADO EN HISTORIAL ---
+        historial = sesiones[chat_id].setdefault("historial", [])
+        respuesta_ia = consultar_ia_groq_con_inventario(texto_usuario_ia, contexto_inventario, historial)
+
+        # Guardamos la interacción actual en la memoria a corto plazo
+        historial.append({"role": "user", "content": texto_usuario_ia})
+        historial.append({"role": "assistant", "content": respuesta_ia})
+        
+        # Mantenemos solo los últimos 6 mensajes para no saturar la memoria
+        sesiones[chat_id]["historial"] = historial[-6:]
 
     except Exception as error:
         print(f"[ERROR] Fallo procesando la consulta '{texto}': {error}")
@@ -494,10 +502,14 @@ def configurar_webhook():
         except Exception as e:
             print("No se pudo configurar el webhook automáticamente:", e)
 
-def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
+def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario, historial=None):
+    if historial is None:
+        historial = []
+
     groq_api_key = os.getenv("GROQ_API_KEY")
     if not groq_api_key:
         return "Error: Falta configurar la variable GROQ_API_KEY en Render."
+
     
     url = "https://api.groq.com/openai/v1/chat/completions"
     headers = {
@@ -524,12 +536,14 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario):
         f"{contexto_inventario}"
     )
 
+# Armamos la conversación: 1. Reglas del sistema, 2. Memoria pasada, 3. Mensaje nuevo
+    mensajes_api = [{"role": "system", "content": prompt_sistema}]
+    mensajes_api.extend(historial)
+    mensajes_api.append({"role": "user", "content": mensaje_usuario})
+
     data = {
         "model": "openai/gpt-oss-20b",
-        "messages": [
-            {"role": "system", "content": prompt_sistema},
-            {"role": "user", "content": mensaje_usuario}
-        ],
+        "messages": mensajes_api,
         "temperature": 0.1
     }
     
@@ -561,4 +575,3 @@ if __name__ == "__main__":
 
         port = int(os.getenv("PORT", 8000))
         uvicorn.run("bot_telegram:app", host="0.0.0.0", port=port)
-
