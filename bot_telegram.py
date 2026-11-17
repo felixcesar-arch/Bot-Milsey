@@ -491,7 +491,7 @@ async def recibir_actualizacion(request: Request):
 
     carrito = sesiones[chat_id]["carrito"]
     
-    match_add = re.findall(r'\[ADD:\s*(.*?)\s*\|\s*([\d\.]+)\]', respuesta_ia)
+    match_add = re.findall(r'\[ADD:\s*(.*?)\s*\|\s*\$?\s*([\d\.]+)\]', respuesta_ia)
     for nombre, precio in match_add:
         carrito.append({"nombre": nombre.strip(), "precio": float(precio)})
     
@@ -599,7 +599,7 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario, histo
         "10. VER CARRITO: Si el cliente pregunta cuánto es en total, qué lleva hasta ahora, o pide pagar, añade la etiqueta: [CHECKOUT]. "
         "11. CONFIRMAR PAGO: Cuando el cliente envíe su comprobante de pago o te confirme explícitamente que ya realizó la transferencia, agradécele con mucho entusiasmo y añade al final de tu respuesta EXACTAMENTE esta etiqueta: [PAGO_CONFIRMADO]. "
         "12. RESUMEN DEL CARRITO: NUNCA intentes recordar, listar o inventar los productos que tiene el cliente en su carrito, y NUNCA calcules el total a pagar por tu cuenta. El sistema interno de la tienda se encarga de hacer esas matemáticas. Si el cliente pregunta qué hay en su carrito o cuánto es el costo, simplemente responde de forma amable: 'Aquí tienes el resumen actualizado de tu carrito:' y asegúrate de emitir la etiqueta [CHECKOUT] al final de tu mensaje para que el sistema le muestre la lista. "
-        "13. CANTIDADES MÚLTIPLES: Si el cliente te pide agregar más de una pieza de un producto (ejemplo: 'agrega 2 pulseras'), DEBES escribir la etiqueta [ADD: Nombre del Artículo] repetida el número exacto de veces que el cliente lo pidió. Por ejemplo, si el cliente pide 2, debes escribir exactamente esto al final de tu mensaje: [ADD: Pulsera Van Cleef] [ADD: Pulsera Van Cleef] \n\n"
+        "13. CANTIDADES Y CARRITO: SIEMPRE que confirmes que agregaste un producto al carrito, es OBLIGATORIO incluir la etiqueta con su nombre exacto y su precio numérico separado por una barra vertical, sin signo de pesos: [ADD: Nombre_Articulo | Precio]. Si el cliente pide más de una pieza (ejemplo: 'agrega 2 pulseras'), DEBES repetir la etiqueta completa el número exacto de veces que pidió. Ejemplo para 2 piezas: [ADD: Pulsera Van Cleef | 350] [ADD: Pulsera Van Cleef | 350] \n\n"
         
         
         f"{contexto_inventario}"
