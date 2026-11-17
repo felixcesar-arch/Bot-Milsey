@@ -155,7 +155,8 @@ async def descontar_stock_en_sheets(carrito):
         # 4. Agrupamos las compras (por si compró 3 piezas iguales del mismo producto)
         conteo_compras = {}
         for item in carrito:
-            conteo_compras[item] = conteo_compras.get(item, 0) + 1
+            nombre = item["nombre"]
+            conteo_compras[nombre] = conteo_compras.get(nombre, 0) + 1
             
         # 5. Buscamos el producto en la tabla y actualizamos la celda exacta
         for i, fila in enumerate(registros):
@@ -505,10 +506,22 @@ async def recibir_actualizacion(request: Request):
     respuesta_limpia = re.sub(r'\[ADD:.*?\]', '', respuesta_ia)
     respuesta_limpia = re.sub(r'\[REMOVE:.*?\]', '', respuesta_limpia)
     
+# --- 1. MOSTRAR CARRITO (CHECKOUT) ---
     if "[CHECKOUT]" in respuesta_limpia or match_add or match_remove:
         respuesta_limpia = respuesta_limpia.replace("[CHECKOUT]", "").strip()
+        
+        carrito = sesiones[chat_id].get("carrito", [])
+        if carrito:
+            total = sum(item["precio"] for item in carrito)
+            ticket = "\n\n🛒 <b>TU CARRITO ACTUAL:</b>\n"
+            for item in carrito:
+                ticket += f"🔸 {item['nombre']} - ${item['precio']:,.2f} MXN\n"
+            ticket += f"\n💰 <b>Total a pagar: ${total:,.2f} MXN</b>"
+            respuesta_limpia += ticket
+        else:
+            respuesta_limpia += "\n\n🛒 <i>Tu carrito está vacío en este momento.</i>"
 
-        # --- GATILLO DE PAGO CONFIRMADO Y DESCUENTO DE INVENTARIO ---
+    # --- 2. GATILLO DE PAGO CONFIRMADO Y DESCUENTO ---
     if "[PAGO_CONFIRMADO]" in respuesta_limpia:
         respuesta_limpia = respuesta_limpia.replace("[PAGO_CONFIRMADO]", "").strip()
         
@@ -522,7 +535,6 @@ async def recibir_actualizacion(request: Request):
             
             # 3. Vaciamos el carrito
             sesiones[chat_id]["carrito"] = []
-        
         if carrito:
             total = sum(item["precio"] for item in carrito)
             ticket = "\n\n🛒 <b>TU CARRITO ACTUAL:</b>\n"
