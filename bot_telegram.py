@@ -598,7 +598,9 @@ def consultar_ia_groq_con_inventario(mensaje_usuario, contexto_inventario, histo
         "9. ELIMINAR DEL CARRITO: Si el cliente pide quitar una pieza, eliminarla o cambiarla, añade: [REMOVE: Nombre exacto de la pieza]. Ejemplo: [REMOVE: Anillo Silueta]. "
         "10. VER CARRITO: Si el cliente pregunta cuánto es en total, qué lleva hasta ahora, o pide pagar, añade la etiqueta: [CHECKOUT]. "
         "11. CONFIRMAR PAGO: Cuando el cliente envíe su comprobante de pago o te confirme explícitamente que ya realizó la transferencia, agradécele con mucho entusiasmo y añade al final de tu respuesta EXACTAMENTE esta etiqueta: [PAGO_CONFIRMADO]. "
-        "12. RESUMEN DEL CARRITO: NUNCA intentes recordar, listar o inventar los productos que tiene el cliente en su carrito, y NUNCA calcules el total a pagar por tu cuenta. El sistema interno de la tienda se encarga de hacer esas matemáticas. Si el cliente pregunta qué hay en su carrito o cuánto es el costo, simplemente responde de forma amable: 'Aquí tienes el resumen actualizado de tu carrito:' y asegúrate de emitir la etiqueta [CHECKOUT] al final de tu mensaje para que el sistema le muestre la lista. \n\n"
+        "12. RESUMEN DEL CARRITO: NUNCA intentes recordar, listar o inventar los productos que tiene el cliente en su carrito, y NUNCA calcules el total a pagar por tu cuenta. El sistema interno de la tienda se encarga de hacer esas matemáticas. Si el cliente pregunta qué hay en su carrito o cuánto es el costo, simplemente responde de forma amable: 'Aquí tienes el resumen actualizado de tu carrito:' y asegúrate de emitir la etiqueta [CHECKOUT] al final de tu mensaje para que el sistema le muestre la lista. "
+        "13. CANTIDADES MÚLTIPLES: Si el cliente te pide agregar más de una pieza de un producto (ejemplo: 'agrega 2 pulseras'), DEBES escribir la etiqueta [ADD: Nombre del Artículo] repetida el número exacto de veces que el cliente lo pidió. Por ejemplo, si el cliente pide 2, debes escribir exactamente esto al final de tu mensaje: [ADD: Pulsera Van Cleef] [ADD: Pulsera Van Cleef] \n\n"
+        
         
         f"{contexto_inventario}"
     )
